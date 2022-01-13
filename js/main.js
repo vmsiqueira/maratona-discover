@@ -36,8 +36,18 @@ const transactions = [
   }
 ]
 
+// save user transactions at local storage
+const Storage = {
+  get() {
+    return JSON.parse(localStorage.getItem('dev.finances:transactions')) || [];
+  },
+  set(transactions){
+    localStorage.setItem('dev.finances:transactions', JSON.stringify(transactions));
+  }
+}
+
 const Transaction = {
-  all: transactions,
+  all: Storage.get(),
   //add functionality
   add(transaction) {
     Transaction.all.push(transaction);
@@ -87,30 +97,28 @@ const DOM = {
   // add a transaction row in a tr tag via js
   addTransaction(transaction, index) {
     const tr = document.createElement('tr');
-    tr.innerHTML = DOM.innerHTMLTransaction(transaction);
+    tr.innerHTML = DOM.innerHTMLTransaction(transaction, index);
+    tr.dataset.index = index;
     //show transaction via JS in HTML
     DOM.transactionsContainer.appendChild(tr);
   },
-
-  innerHTMLTransaction(transaction) {
+  // html model for a transaction
+  innerHTMLTransaction(transaction, index) {
     // change CSS class based on amount value (positive or negative)
     const CSSclass = transaction.amount > 0 ? 'income' : 'expense';
-
     // currency format
     const amount = Utils.formatCurrency(transaction.amount)
-    
     // built HTML in index.html
     const html = `
       <td class="description">${transaction.description}</td>
       <td class="${CSSclass}">${amount}</td>
       <td class="date">${transaction.date}</td>
       <td>
-        <img src="/assets/minus.svg" alt="Remover transação">
+        <img onclick="Transaction.remove(${index})" src="/assets/minus.svg" alt="Remover transação">
       </td>
       `
       return html;
   },
-
   //update the Balance cards in our application via js
   updateBalance(){
     document
@@ -123,7 +131,7 @@ const DOM = {
       .getElementById('totalDisplay')
       .innerHTML = Utils.formatCurrency(Transaction.total())
   },
-
+  //clear the transaction container
   clearTransactions(){
     DOM.transactionsContainer.innerHTML = '';
   },
@@ -131,6 +139,17 @@ const DOM = {
 
 // change to the currency format
 const Utils = {
+  // format amount values posted by users
+  formatAmount(value){
+    value = Number(value.replace(/\,\./g), '') * 100;
+    return value;
+  },
+  //format the date posted by user
+  formatDate(date){
+    const splittedDate = date.split('-');
+    return `${splittedDate[2]}/${splittedDate[1]}/${splittedDate[0]}`;
+  },
+  //format the value to currency mode
   formatCurrency(value) {
     const signal = Number(value) < 0 ? '-' : '';
     value = String(value).replace(/\D/g, "");
@@ -147,7 +166,7 @@ const Form = {
   description: document.querySelector('input#description'),
   amount: document.querySelector('input#amount'),
   date: document.querySelector('input#date'),
-
+  // function to get the values
   getValues() {
     return {
       description: Form.description.value,
@@ -155,10 +174,16 @@ const Form = {
       date: Form.date.value
     }
   },
-
   // format data in order to save
-  formatData() {
-    console.log('formatar os dados')
+  formatValues() {
+    let { description, amount, date } = Form.getValues()
+    amount = Utils.formatAmount(amount);
+    date = Utils.formatDate(date);
+    return {
+      description,
+      amount,
+      date
+    }
   },
   // verify if the fields are empty
   validateFields() {
@@ -166,7 +191,12 @@ const Form = {
     if (description.trim() === '' || amount.trim() === '' || date.trim() === '') {
       throw new Error('Por favor, preencha todos os campos')
     }
-    console.log(Form.getValues)
+  },
+  // clear form fields after add a transaction
+  clearFields(){
+    Form.description.value = ''
+    Form.amount.value = ''
+    Form.date.value = ''
   },
 
 
@@ -174,12 +204,17 @@ const Form = {
     event.preventDefault();
 
     try {
+      // validate form fields
       Form.validateFields();
-      Form.formatData();
-      // save form data
+      // format form values sent by the users
+      const transaction = Form.formatValues();
+      // save form data - add a transaction
+      Transaction.add(transaction);
       // clear form data
+      Form.clearFields();
       // close modal
-      // reload Application  PAREI EM 2:17:38
+      toggleModal();
+      // reload Application - add method already does it
     } catch (error) {
       alert(error.message)
     }
@@ -189,11 +224,13 @@ const Form = {
 //App
 const App = {
   init() {
-    Transaction.all.forEach(function(transaction){
-      DOM.addTransaction(transaction);
+    Transaction.all.forEach(function(transaction, index){
+      DOM.addTransaction(transaction, index);
     })
     
     DOM.updateBalance();
+
+    Storage.set(Transaction.all);
   },
   reload() {
     DOM.clearTransactions()
